@@ -17,6 +17,7 @@ Plus:
 - **Patient page** – full chronological timeline of every visit, and "New visit" buttons that walk you through steps 2 → 6. After each save a "Next step →" button appears.
 - **Settings** – clinic name, address, phone, registration no., timings (used on printed letterheads) and an editable **service price list** (consultation fee, X-ray, ECG, lab tests…).
 - **Backup / restore** (JSON) and **bills export to CSV** (opens in Excel).
+- **🔒 PIN lock** – Settings → PIN lock: set a 4–6 digit PIN. The app asks for it every time it opens, auto-locks when idle (1–30 min, default 5), and the 🔒 button at the top locks it instantly. After 5 wrong tries it makes you wait (30 s, growing each time).
 - Works on phone, tablet and computer.
 
 ## How to use
@@ -34,6 +35,8 @@ That also means:
 - Use the **same device and browser** every day.
 - Go to **Settings → Download backup** regularly (e.g. every week) and keep the file safe (Google Drive / email). Use **Restore** to move data to a new phone or computer.
 - Clearing browser data / history will erase the records if you have no backup.
+- The PIN lock is a **privacy screen** (stops someone who picks up the phone/computer from seeing records). It does not encrypt the stored data, so also keep the device itself protected with its own screen lock.
+- A forgotten PIN **cannot be recovered**: "Forgot PIN?" erases the data on that device, and you then restore it from your backup file.
 
 ## Files
 

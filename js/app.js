@@ -901,6 +901,8 @@ function pageSettings() {
       ${rowsHTML('services', s.services, '+ Add service')}
       <div class="details-actions"><button type="submit" class="btn btn-primary">💾 Save settings</button></div>
     </form>
+    <div class="panel-col">
+    ${pinPanel()}
     <div class="panel">
       <div class="panel-head" style="--c:#0284c7"><h3>🛟 Backup & restore</h3></div>
       <p class="note">All data is saved <b>only in this browser on this device</b> (${size} KB used). Download a backup regularly (e.g. weekly) and keep it in Google Drive / email, so nothing is lost if the browser data is cleared or you change phone/computer.</p>
@@ -911,6 +913,7 @@ function pageSettings() {
         <button class="btn btn-light" data-act="export-csv">📄 Export bills (CSV)</button>
         <button class="btn btn-danger" data-act="reset">⚠️ Erase all data</button>
       </div>
+    </div>
     </div>
   </div>`;
 }
@@ -1113,6 +1116,8 @@ document.addEventListener('click', (e) => {
       location.hash = path + (qs.toString() ? '?' + qs : '');
       break;
     }
+    case 'lock-now': lockApp(); break;
+    case 'pin-remove': removePin(); break;
     case 'backup': backup(); break;
     case 'export-csv': exportCSV(); break;
     case 'reset':
@@ -1158,6 +1163,8 @@ $('#global-search').addEventListener('submit', (e) => {
 
 // settings save + restore
 document.addEventListener('submit', (e) => {
+  if (e.target.id === 'pin-form') { e.preventDefault(); savePin(e.target); return; }
+  if (e.target.id === 'autolock-form') return;
   if (e.target.id !== 'settings-form') return;
   e.preventDefault();
   const d = Object.fromEntries(new FormData(e.target));
@@ -1165,7 +1172,10 @@ document.addEventListener('submit', (e) => {
   db.settings = { ...db.settings, ...d, followupDays: Number(d.followupDays) || 7, services };
   save(); render(); toast('Settings saved ✓');
 });
-document.addEventListener('change', (e) => { if (e.target.id === 'restore-file' && e.target.files[0]) restore(e.target.files[0]); });
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'restore-file' && e.target.files[0]) restore(e.target.files[0]);
+  if (e.target.id === 'autolock-min') { const c = getPin(); if (c) { c.autoLock = Number(e.target.value); setPin(c); toast('Auto-lock updated ✓'); } }
+});
 
 // mobile menu
 const toggleMenu = (open) => { $('#sidebar').classList.toggle('open', open); $('#backdrop').classList.toggle('show', open); };
@@ -1173,12 +1183,185 @@ $('#menu-btn').addEventListener('click', () => toggleMenu(true));
 $('#backdrop').addEventListener('click', () => toggleMenu(false));
 
 // keep tabs in sync if the clinic is open in two tabs
-window.addEventListener('storage', (e) => { if (e.key === DB_KEY) { db = load(); render(); } });
+window.addEventListener('storage', (e) => {
+  if (e.key === DB_KEY) { db = load(); render(); }
+  if (e.key === PIN_KEY) { if (getPin()) lockApp(); else render(); }
+});
+
+
+/* =========================================================
+   PIN LOCK
+   A privacy screen: data stays hidden until the PIN is
+   entered, and the app re-locks after inactivity.
+   ========================================================= */
+const PIN_KEY = 'amassociates_clinic_pin_v1';
+let locked = false;
+let pinEntry = '';
+let failCount = 0;
+let lockedUntil = 0;
+let lastActivity = Date.now();
+
+function getPin() { try { return JSON.parse(localStorage.getItem(PIN_KEY) || 'null'); } catch (e) { return null; } }
+function setPin(cfg) { if (cfg) localStorage.setItem(PIN_KEY, JSON.stringify(cfg)); else localStorage.removeItem(PIN_KEY); }
+
+async function hashPin(pin, salt) {
+  const text = `${salt}:${pin}:am-associates`;
+  if (window.crypto && crypto.subtle) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  // fallback for very old browsers / insecure contexts
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  return 'f' + (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
+}
+async function checkPin(pin) {
+  const cfg = getPin();
+  return !!cfg && (await hashPin(pin, cfg.salt)) === cfg.hash;
+}
+
+function lockApp() {
+  const cfg = getPin();
+  if (!cfg) return;
+  locked = true;
+  closeModal();
+  toggleMenu(false);
+  $('#view').innerHTML = '';
+  $('#nav').innerHTML = '';
+  $('#toasts').innerHTML = '';
+  $('#print-area').innerHTML = '';
+  pinEntry = '';
+  $('#lock-clinic').textContent = db.settings.clinicName;
+  setLockMsg('Enter your PIN to unlock');
+  drawDots();
+  $('#lock').classList.remove('hidden');
+  document.body.classList.add('no-scroll', 'is-locked');
+}
+function unlockApp() {
+  locked = false;
+  failCount = 0;
+  lastActivity = Date.now();
+  $('#lock').classList.add('hidden');
+  document.body.classList.remove('no-scroll', 'is-locked');
+  render();
+}
+function setLockMsg(msg, err) {
+  const el = $('#lock-msg');
+  el.textContent = msg;
+  el.classList.toggle('err', !!err);
+}
+function drawDots() {
+  const len = (getPin() || {}).len || 4;
+  $('#pin-dots').innerHTML = [...Array(len)].map((_, i) => `<span class="${i < pinEntry.length ? 'on' : ''}"></span>`).join('');
+}
+async function pressKey(k) {
+  if (!locked) return;
+  if (Date.now() < lockedUntil) return;
+  const cfg = getPin();
+  if (!cfg) return unlockApp();
+  if (k === 'back') pinEntry = pinEntry.slice(0, -1);
+  else if (k === 'clear') pinEntry = '';
+  else if (/^\d$/.test(k) && pinEntry.length < cfg.len) pinEntry += k;
+  drawDots();
+  if (pinEntry.length < cfg.len) return;
+  const attempt = pinEntry;
+  pinEntry = '';
+  if (await checkPin(attempt)) { unlockApp(); return; }
+  failCount += 1;
+  $('#pin-dots').classList.add('shake');
+  setTimeout(() => { $('#pin-dots').classList.remove('shake'); drawDots(); }, 450);
+  if (failCount >= 5) {
+    const secs = 30 * Math.pow(2, Math.min(failCount - 5, 4));
+    lockedUntil = Date.now() + secs * 1000;
+    setLockMsg(`Too many wrong attempts. Try again in ${secs} seconds.`, true);
+    const t = setInterval(() => {
+      const left = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (left <= 0 || !locked) { clearInterval(t); if (locked) setLockMsg('Enter your PIN to unlock'); }
+      else setLockMsg(`Too many wrong attempts. Try again in ${left} seconds.`, true);
+    }, 1000);
+  } else {
+    setLockMsg(`Wrong PIN. ${5 - failCount} attempt${5 - failCount === 1 ? '' : 's'} left before a short wait.`, true);
+  }
+}
+$('#keypad').addEventListener('click', (e) => { const b = e.target.closest('[data-k]'); if (b) pressKey(b.dataset.k); });
+document.addEventListener('keydown', (e) => {
+  if (!locked) return;
+  const k = /^\d$/.test(e.key) ? e.key : { Backspace: 'back', Escape: 'clear' }[e.key];
+  if (!k) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  pressKey(k);
+}, true);
+$('#lock-forgot').addEventListener('click', () => {
+  if (!confirm('Forgot your PIN?\n\nFor patient privacy the PIN cannot be recovered. The only way in is to ERASE all clinic data on this device and remove the PIN.\n\nYou can then restore your data from a backup file (Settings → Restore from backup).\n\nContinue?')) return;
+  if (prompt('Type ERASE to wipe this device\'s clinic data and remove the PIN') !== 'ERASE') return;
+  localStorage.removeItem(DB_KEY);
+  setPin(null);
+  db = emptyDB();
+  unlockApp();
+  location.hash = '#/settings';
+  toast('Data erased and PIN removed. Restore your backup here.');
+});
+
+// auto-lock after inactivity, and when coming back to a tab that sat idle
+['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'].forEach((ev) => window.addEventListener(ev, () => { if (!locked) lastActivity = Date.now(); }, { passive: true, capture: true }));
+function checkIdle() {
+  const cfg = getPin();
+  if (!cfg || locked || !cfg.autoLock) return;
+  if (Date.now() - lastActivity > cfg.autoLock * 60000) lockApp();
+}
+setInterval(checkIdle, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkIdle(); });
+
+const AUTOLOCK_OPTS = [[1, 'After 1 minute'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes'], [15, 'After 15 minutes'], [30, 'After 30 minutes'], [0, 'Never (lock only when I tap 🔒)']];
+function pinPanel() {
+  const cfg = getPin();
+  const pinField = (label, name) => `<label class="fld"><span>${label}</span><input type="password" name="${name}" inputmode="numeric" pattern="\\d{4,6}" minlength="4" maxlength="6" autocomplete="off" required placeholder="4–6 digits" /></label>`;
+  return `<div class="panel">
+    <div class="panel-head" style="--c:#db2777"><h3>🔒 PIN lock</h3>${cfg ? '<span class="status st-done">ON</span>' : '<span class="status st-overdue">OFF</span>'}</div>
+    <p class="note">${cfg
+      ? 'The app asks for your PIN every time it is opened, and locks itself when left idle. Tap 🔒 at the top to lock it instantly (e.g. before handing the phone to a patient).'
+      : 'Set a 4–6 digit PIN so nobody else can see patient records when they pick up your phone or computer.'}</p>
+    <form id="pin-form" class="grid pin-grid">
+      ${cfg ? pinField('Current PIN', 'current') : ''}
+      ${pinField(cfg ? 'New PIN' : 'Choose PIN', 'pin')}
+      ${pinField('Confirm PIN', 'confirm')}
+      <div class="details-actions span-4"><button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg,#ec4899,#be185d)">${cfg ? '🔁 Change PIN' : '🔒 Turn on PIN lock'}</button>
+      ${cfg ? '<button type="button" class="btn btn-light" data-act="lock-now">🔒 Lock now</button><button type="button" class="btn btn-danger" data-act="pin-remove">Turn off</button>' : ''}</div>
+    </form>
+    ${cfg ? `<form id="autolock-form" class="grid pin-grid" style="margin-top:12px">${fld('Auto-lock when idle', 'autolock', String(cfg.autoLock ?? 5), { type: 'select', opts: AUTOLOCK_OPTS.map(([v, l]) => [String(v), l]), span: 4 }).replace('name="autolock"', 'name="autolock" id="autolock-min"')}</form>` : ''}
+    <p class="note warn">⚠️ Remember your PIN – it cannot be recovered. If forgotten, the data on this device must be erased and restored from a backup file.</p>
+  </div>`;
+}
+async function savePin(form) {
+  const d = Object.fromEntries(new FormData(form));
+  const cfg = getPin();
+  if (cfg && !(await checkPin(d.current))) { toast('Current PIN is wrong'); return; }
+  if (!/^\d{4,6}$/.test(d.pin)) { toast('PIN must be 4 to 6 digits'); return; }
+  if (d.pin !== d.confirm) { toast('PINs do not match'); return; }
+  if (/^(\d)\1+$/.test(d.pin) || '0123456789'.includes(d.pin) || '9876543210'.includes(d.pin)) {
+    if (!confirm(`"${d.pin}" is very easy to guess. Use it anyway?`)) return;
+  }
+  const salt = uid() + uid();
+  setPin({ salt, hash: await hashPin(d.pin, salt), len: d.pin.length, autoLock: cfg ? cfg.autoLock : 5, setAt: new Date().toISOString() });
+  lastActivity = Date.now();
+  render();
+  toast(cfg ? 'PIN changed ✓' : 'PIN lock is ON ✓ – the app will ask for it next time');
+}
+async function removePin() {
+  const cur = prompt('Enter your current PIN to turn off the PIN lock');
+  if (cur === null) return;
+  if (!(await checkPin(cur.trim()))) { toast('Wrong PIN – lock is still on'); return; }
+  setPin(null);
+  render();
+  toast('PIN lock turned off');
+}
 
 /* =========================================================
    ROUTER
    ========================================================= */
 function render() {
+  if (locked) return; // never put patient data on screen while locked
   const [path] = location.hash.slice(2).split('?');
   const [page, id] = path.split('/');
   let html;
@@ -1191,6 +1374,7 @@ function render() {
   }
   $('#view').innerHTML = html;
   renderNav();
+  $('#lock-btn').classList.toggle('hidden', !getPin());
 }
 let lastPath = '';
 window.addEventListener('hashchange', () => {
@@ -1201,4 +1385,4 @@ window.addEventListener('hashchange', () => {
 });
 if (!location.hash) history.replaceState(null, '', '#/dashboard');
 lastPath = location.hash.split('?')[0];
-render();
+if (getPin()) lockApp(); else render();

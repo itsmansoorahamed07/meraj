@@ -295,6 +295,31 @@ table.mini td { padding: 5px 4px; border-bottom: 1px dashed #f1f5f9; }
 .bill-total-box span { font-size: 12px; opacity: .9; }
 .bill-total-box strong { font-size: 22px; }
 
+/* ---------- PIN lock ---------- */
+.hidden { display: none !important; }
+.lock { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 20px; overflow-y: auto;
+  background: linear-gradient(140deg, #4c1d95 0%, #7c3aed 35%, #db2777 70%, #f97316 100%); }
+.lock-card { background: rgba(255,255,255,.14); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.3); border-radius: 28px; padding: 28px 26px 18px; width: 100%; max-width: 340px; color: #fff; text-align: center; box-shadow: var(--shadow-lg); }
+.lock-logo { margin: 0 auto 10px; width: 64px; height: 64px; font-size: 22px; border-radius: 18px; }
+.lock-card h2 { font-size: 21px; font-weight: 800; }
+.lock-msg { margin: 6px 0 16px; opacity: .95; min-height: 21px; font-size: 13.5px; }
+.lock-msg.err { color: #fff; background: rgba(225,29,72,.55); border-radius: 10px; padding: 4px 8px; }
+.pin-dots { display: flex; justify-content: center; gap: 14px; margin-bottom: 20px; }
+.pin-dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; transition: background .12s, transform .12s; }
+.pin-dots span.on { background: #fff; transform: scale(1.1); }
+.pin-dots.shake { animation: shake .4s; }
+@keyframes shake { 20%, 60% { transform: translateX(-9px); } 40%, 80% { transform: translateX(9px); } }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.keypad button { height: 62px; border-radius: 50%; width: 62px; justify-self: center; border: 0; background: rgba(255,255,255,.2); color: #fff; font-size: 24px; font-weight: 600; cursor: pointer; transition: background .12s, transform .08s; }
+.keypad button:hover { background: rgba(255,255,255,.32); }
+.keypad button:active { transform: scale(.92); background: rgba(255,255,255,.45); }
+.keypad .k-fn { background: transparent; font-size: 20px; }
+.lock-forgot { margin-top: 16px; background: none; border: 0; color: #fff; opacity: .8; text-decoration: underline; cursor: pointer; font-size: 12.5px; }
+body.is-locked .app { visibility: hidden; }
+.lock-btn { width: 42px; height: 42px; border-radius: 12px; background: #fff; box-shadow: var(--shadow); font-size: 18px; flex-shrink: 0; }
+.pin-grid { grid-template-columns: repeat(3, 1fr); margin-top: 10px; }
+.note.warn { background: #fff7ed; color: #9a3412; margin-top: 12px; }
+
 /* ---------- toasts ---------- */
 .toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: max-content; max-width: calc(100vw - 32px); }
 .toast { background: #1e1b4b; color: #fff; padding: 11px 14px 11px 18px; border-radius: 14px; box-shadow: var(--shadow-lg); display: flex; gap: 12px; align-items: center; animation: pop .2s; transition: opacity .4s, transform .4s; font-weight: 500; }
@@ -326,6 +351,7 @@ table.mini td { padding: 5px 4px; border-bottom: 1px dashed #f1f5f9; }
   .hero h1 { font-size: 22px; }
   .page-head h1 { font-size: 21px; }
   .grid, .modal-box:not(.wide) .grid { grid-template-columns: repeat(2, 1fr); }
+  .pin-grid { grid-template-columns: 1fr; }
   .span-3 { grid-column: 1 / -1; }
   .tsearch { min-width: 0; flex: 1 1 100%; }
   .tl-day { grid-template-columns: 1fr; gap: 8px; }

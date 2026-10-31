@@ -37,6 +37,7 @@
           <input type="search" id="global-q" placeholder="Search patient by name, phone or ID…" autocomplete="off" />
         </form>
         <button class="btn btn-primary" data-act="add" data-type="patients">＋ New Patient</button>
+        <button class="icon-btn lock-btn hidden" id="lock-btn" data-act="lock-now" title="Lock now" aria-label="Lock now">🔒</button>
       </header>
       <section class="view" id="view"></section>
     </main>
@@ -56,6 +57,23 @@
           <button type="submit" class="btn btn-primary" id="modal-submit">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- PIN lock screen -->
+  <div class="lock hidden" id="lock" role="dialog" aria-modal="true" aria-label="Enter PIN">
+    <div class="lock-card">
+      <div class="brand-logo lock-logo">AM</div>
+      <h2 id="lock-clinic">AM Associates</h2>
+      <p class="lock-msg" id="lock-msg">Enter your PIN to unlock</p>
+      <div class="pin-dots" id="pin-dots"></div>
+      <div class="keypad" id="keypad">
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="clear" class="k-fn" aria-label="Clear">C</button><button data-k="0">0</button><button data-k="back" class="k-fn" aria-label="Backspace">⌫</button>
+      </div>
+      <button type="button" class="lock-forgot" id="lock-forgot">Forgot PIN?</button>
     </div>
   </div>
 
